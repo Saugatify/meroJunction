@@ -206,69 +206,71 @@
             alert("Geolocation is not supported by your browser.");
         }
     
-        // Loop through junctions and add markers with custom icons
-        junctions.forEach(junction => {
-            const customIcon = L.icon({
-                iconUrl: junction.iconUrl,
-                iconSize: [32, 32], // Size of the icon
-                iconAnchor: [16, 32], // Anchor point of the icon
-            });
-    
-            const marker = L.marker([junction.latitude, junction.longitude], { icon: customIcon })
-                .addTo(map);
-    
-            // Add click event to show route and remove old one
-            marker.on('click', () => {
-                if (currentLocation) {
-                    // Remove the old route if it exists
-                    if (routingControl) {
-                        map.removeControl(routingControl);
+// Loop through junctions and add markers with custom icons
+junctions.forEach(junction => {
+    const customIcon = L.icon({
+        iconUrl: junction.iconUrl,
+        iconSize: [32, 32], // Size of the icon
+        iconAnchor: [16, 32], // Anchor point of the icon
+    });
+
+    const marker = L.marker([junction.latitude, junction.longitude], { icon: customIcon })
+        .addTo(map)
+        .bindPopup(`<b>${junction.name}</b>`); // Add popup with the junction name
+
+    // Add click event to show route and remove old one
+    marker.on('click', () => {
+        if (currentLocation) {
+            // Remove the old route if it exists
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+
+            // Create new route with custom blue line and glow effect
+            routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(currentLocation[0], currentLocation[1]),
+                    L.latLng(junction.latitude, junction.longitude)
+                ],
+                createMarker: function (i, waypoint, n) {
+                    // Use custom icon for destination marker
+                    if (i === n - 1) {
+                        return L.marker(waypoint.latLng, { icon: customIcon });
+                    } else {
+                        return L.marker(waypoint.latLng);
                     }
-    
-                    // Create new route with custom blue line and glow effect
-                    routingControl = L.Routing.control({
-                        waypoints: [
-                            L.latLng(currentLocation[0], currentLocation[1]),
-                            L.latLng(junction.latitude, junction.longitude)
-                        ],
-                        createMarker: function (i, waypoint, n) {
-                            // Use custom icon for destination marker
-                            if (i === n - 1) {
-                                return L.marker(waypoint.latLng, { icon: customIcon });
-                            } else {
-                                return L.marker(waypoint.latLng);
-                            }
-                        },
-                        lineOptions: {
-                            styles: [
-                                { color: 'blue', opacity: 0.6, weight: 8 }, // Outer line for glow
-                                { color: '#00f', opacity: 1, weight: 4 }, // Inner line
-                            ]
-                        },
-                        routeWhileDragging: true,
-                        addWaypoints: false,
-                        draggableWaypoints: false,
-                        show: false // Disable the default popups!
-                    }).addTo(map);
-    
-                    // Update the sliding panel with turn-by-turn directions
-                    routingControl.on('routesfound', function (e) {
-                        const route = e.routes[0];
-                        const instructions = route.instructions.map(instruction => `<li>${instruction.text}</li>`).join('');
-    
-                        const routeDescription = document.getElementById('routeDescription');
-                        const directionsList = document.getElementById('directionsList');
-                        directionsList.innerHTML = instructions;
-    
-                        // Auto-expand the sliding panel
-                        const slidingPanel = document.getElementById('slidingPanel');
-                        slidingPanel.classList.add('active');
-                    });
-                } else {
-                    alert("Your location is not available. Please enable location services.");
-                }
+                },
+                lineOptions: {
+                    styles: [
+                        { color: 'blue', opacity: 0.6, weight: 8 }, // Outer line for glow
+                        { color: '#00f', opacity: 1, weight: 4 }, // Inner line
+                    ]
+                },
+                routeWhileDragging: true,
+                addWaypoints: false,
+                draggableWaypoints: false,
+                show: false // Disable the default popups!
+            }).addTo(map);
+
+            // Update the sliding panel with turn-by-turn directions
+            routingControl.on('routesfound', function (e) {
+                const route = e.routes[0];
+                const instructions = route.instructions.map(instruction => `<li>${instruction.text}</li>`).join('');
+
+                const routeDescription = document.getElementById('routeDescription');
+                const directionsList = document.getElementById('directionsList');
+                directionsList.innerHTML = instructions;
+
+                // Auto-expand the sliding panel
+                const slidingPanel = document.getElementById('slidingPanel');
+                slidingPanel.classList.add('active');
             });
-        });
+        } else {
+            alert("Your location is not available. Please enable location services.");
+        }
+    });
+});
+
     
         // Handle sliding panel toggle
         const slidingPanel = document.getElementById('slidingPanel');
