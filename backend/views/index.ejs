@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mero Junction</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+
+    <style>
+        /* Use Poppins font throughout */
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5; /* Light grey background for the body */
+        }
+
+        /* Style the map */
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* Sliding panel style */
+        .sliding-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background-color: white;
+            border-radius: 15px 15px 0 0;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            transition: height 0.3s ease-in-out;
+            z-index: 1000;
+            padding: 10px;
+        }
+
+        .sliding-panel.active {
+            height: 300px;
+            overflow-y: auto; /* Enable scrolling when expanded */
+        }
+
+        .sliding-panel .handle {
+            width: 60px;
+            height: 5px;
+            background-color: #cccccc;
+            border-radius: 5px;
+            margin: 10px auto;
+            cursor: pointer;
+        }
+
+        .sliding-panel-content {
+            padding: 15px;
+        }
+
+        /* Style for route description */
+        .sliding-panel-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333333;
+            margin-bottom: 10px;
+        }
+
+        p {
+            font-size: 14px;
+            color: #666666;
+        }
+
+        ul.route-instructions {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        ul.route-instructions li {
+            padding: 8px 0;
+            font-size: 14px;
+            color: #444444;
+            border-bottom: 1px solid #eeeeee;
+        }
+
+        ul.route-instructions li:last-child {
+            border-bottom: none;
+        }
+
+        /* Make it look nice on mobile */
+        @media (max-width: 768px) {
+            .sliding-panel {
+                height: 60px;
+            }
+
+            .sliding-panel.active {
+                height: 70vh;
+            }
+
+            ul.route-instructions li {
+                font-size: 12px;
+            }
+
+            h3 {
+                font-size: 16px;
+            }
+
+            p {
+                font-size: 12px;
+            }
+        }
+
+        /* Additional styling for improved aesthetics */
+        .leaflet-popup-content-wrapper {
+            background: #ffffff;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .leaflet-popup-content {
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            color: #333333;
+        }
+
+        /* Zoom button styling */
+        .leaflet-control-zoom a {
+            background-color: #00aaff;
+            color: #ffffff;
+            font-size: 18px;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <!-- Sliding panel for route description -->
+    <div class="sliding-panel" id="slidingPanel">
+        <div class="handle" id="panelHandle"></div>
+        <div class="sliding-panel-content" id="routeDescription">
+            <h3>Route Description</h3>
+            <p>No route selected yet.</p>
+            <ul id="directionsList" class="route-instructions"></ul>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+    
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([27.7172, 85.3240], 22);
+    
+        // Add the dark tile layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+        }).addTo(map);
+    
+        // Junctions data from server-side
+        const junctions = <%- JSON.stringify(junctions) %>;
+    
+        // Custom icon for user's current location
+        const userIcon = L.icon({
+            iconUrl: '/images/user.png', // Path to the user icon
+            iconSize: [, 34], // Size of the icon
+            iconAnchor: [16, 32], // Anchor point of the icon
+        });
+    
+        // To store user's current position
+        let currentLocation;
+        let routingControl = null; // Variable to store the route control
+        let userMarker; // Declare outside of the callback
+    
+        // Watch user's location
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    currentLocation = [latitude, longitude];
+                    map.setView(currentLocation, 13);
+    
+                    // Remove existing user marker if present
+                    if (userMarker) {
+                        map.removeLayer(userMarker);
+                    }
+    
+                    // Add marker with custom icon for user's current location
+                    userMarker = L.marker(currentLocation, { icon: userIcon }).addTo(map);
+                },
+                (error) => {
+                    console.error(`Error (${error.code}): ${error.message}`);
+                    alert("Unable to retrieve your location. Please check your location settings.");
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        } else {
+            console.log("Geolocation is not supported by this browser.");
+            alert("Geolocation is not supported by your browser.");
+        }
+    
+        // Loop through junctions and add markers with custom icons
+        junctions.forEach(junction => {
+            const customIcon = L.icon({
+                iconUrl: junction.iconUrl,
+                iconSize: [32, 32], // Size of the icon
+                iconAnchor: [16, 32], // Anchor point of the icon
+            });
+    
+            const marker = L.marker([junction.latitude, junction.longitude], { icon: customIcon })
+                .addTo(map);
+    
+            // Add click event to show route and remove old one
+            marker.on('click', () => {
+                if (currentLocation) {
+                    // Remove the old route if it exists
+                    if (routingControl) {
+                        map.removeControl(routingControl);
+                    }
+    
+                    // Create new route with custom blue line and glow effect
+                    routingControl = L.Routing.control({
+                        waypoints: [
+                            L.latLng(currentLocation[0], currentLocation[1]),
+                            L.latLng(junction.latitude, junction.longitude)
+                        ],
+                        createMarker: function (i, waypoint, n) {
+                            // Use custom icon for destination marker
+                            if (i === n - 1) {
+                                return L.marker(waypoint.latLng, { icon: customIcon });
+                            } else {
+                                return L.marker(waypoint.latLng);
+                            }
+                        },
+                        lineOptions: {
+                            styles: [
+                                { color: 'blue', opacity: 0.6, weight: 8 }, // Outer line for glow
+                                { color: '#00f', opacity: 1, weight: 4 }, // Inner line
+                            ]
+                        },
+                        routeWhileDragging: true,
+                        addWaypoints: false,
+                        draggableWaypoints: false,
+                        show: false // Disable the default popups!
+                    }).addTo(map);
+    
+                    // Update the sliding panel with turn-by-turn directions
+                    routingControl.on('routesfound', function (e) {
+                        const route = e.routes[0];
+                        const instructions = route.instructions.map(instruction => `<li>${instruction.text}</li>`).join('');
+    
+                        const routeDescription = document.getElementById('routeDescription');
+                        const directionsList = document.getElementById('directionsList');
+                        directionsList.innerHTML = instructions;
+    
+                        // Auto-expand the sliding panel
+                        const slidingPanel = document.getElementById('slidingPanel');
+                        slidingPanel.classList.add('active');
+                    });
+                } else {
+                    alert("Your location is not available. Please enable location services.");
+                }
+            });
+        });
+    
+        // Handle sliding panel toggle
+        const slidingPanel = document.getElementById('slidingPanel');
+        const panelHandle = document.getElementById('panelHandle');
+    
+        // Track panel open state
+        let isPanelOpen = false;
+    
+        // Function to toggle panel state
+        function togglePanel() {
+            isPanelOpen = !isPanelOpen;
+            if (isPanelOpen) {
+                slidingPanel.classList.add('active');
+            } else {
+                slidingPanel.classList.remove('active');
+            }
+        }
+    
+        // Add click event listener to panel handle
+        panelHandle.addEventListener('click', togglePanel);
+    
+        // Add touch event listener to the map
+        map.on('click', () => {
+            if (isPanelOpen) {
+                togglePanel(); // Close the panel if it is open
+            }
+        });
+    </script>
+</body>
+
+</html>
